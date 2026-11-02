@@ -1,0 +1,53 @@
+name: Publish radar
+run-name: Radar snapshot ${{ inputs.snapshot_id || github.event_name }}
+on:
+  workflow_dispatch:
+    inputs:
+      snapshot_base64:
+        description: Public snapshot (gzip + base64; no credentials)
+        required: false
+        default: ''
+      snapshot_id:
+        description: Public snapshot identifier
+        required: false
+        default: manual
+  push:
+    branches: [main]
+    paths: ['index.html', 'app.js', 'style.css', 'build-snapshot.mjs', '.github/workflows/publish.yml']
+  schedule:
+    - cron: '17 2 * * *'
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: radar-pages
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Configure Pages
+        id: pages
+        uses: actions/configure-pages@v5
+      - name: Build validated public snapshot
+        env:
+          SNAPSHOT: ${{ inputs.snapshot_base64 }}
+          PREVIOUS_URL: ${{ steps.pages.outputs.base_url }}/videos.json
+          SNAPSHOT_ID: ${{ inputs.snapshot_id }}
+        run: |
+          mkdir -p site
+          cp index.html app.js style.css site/
+          node build-snapshot.mjs
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+          retention-days: 1
+      - name: Deploy Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
